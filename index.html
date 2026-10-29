@@ -1,0 +1,453 @@
+<!doctype html>
+<html lang="zh-Hant">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1, viewport-fit=cover">
+<title>仰望星空之人</title>
+<link rel="preconnect" href="https://fonts.googleapis.com">
+<link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
+<link rel="stylesheet" href="https://fonts.googleapis.com/css2?family=Noto+Serif+TC:wght@300;500&family=DM+Mono:wght@400;500&family=Cormorant+Garamond:ital,wght@1,500&display=swap">
+<style>
+/* 仰望星空之人 v1 門口：整站＝一座觀星艙（取宇宙湯「整站是一個場景」的神，不取它的形）。
+   清冷＝天青；一點暖＝月光淡金，只點在少數地方；塵＝開場的粒子；舷窗＝可以拖著轉的南天星空。
+   不寫明確地點；時間用觀看者自己的時區。 */
+:root{
+  --void:#04060c; --ink:#ece6d8; --dim:#8a92a6; --frost:#b9c3d6;
+  --ember:#8fc3e8;          /* 天青：主色（變數名沿用，全站重點色） */
+  --moon:#e6d3a3;           /* 月光淡金：一點暖 */
+  --f-display:"Noto Serif TC","Songti TC",serif;
+  --f-mono:"DM Mono",ui-monospace,Menlo,monospace;
+  --f-it:"Cormorant Garamond",Georgia,serif;
+  color-scheme:dark;
+}
+*{box-sizing:border-box}
+html,body{margin:0;height:100%;background:var(--void);color:var(--ink);overflow:hidden}
+body{font-family:var(--f-display);-webkit-font-smoothing:antialiased}
+canvas{position:fixed;inset:0;width:100%;height:100%;display:block}
+#sky{cursor:grab;touch-action:none}
+#sky.drag{cursor:grabbing}
+.mono{font-family:var(--f-mono);letter-spacing:.18em;text-transform:uppercase}
+
+/* ---------- 開場：塵 → 仰望 ---------- */
+#boot{position:fixed;inset:0;z-index:20;display:grid;place-items:center;background:var(--void);transition:opacity 1.2s ease}
+#boot.gone{opacity:0;pointer-events:none}
+#dust{position:absolute;inset:0}
+.boot-in{position:relative;text-align:center;padding:0 16px}
+.boot-log{font:400 .72rem/2 var(--f-mono);letter-spacing:.2em;color:var(--dim);min-height:6em;text-align:left;display:inline-block}
+.boot-log b{color:var(--ember);font-weight:500}
+#light{margin-top:2.2rem;background:none;border:1px solid rgba(143,195,232,.5);color:var(--ember);
+  font:500 .8rem/1 var(--f-mono);letter-spacing:.4em;padding:1rem 1.6rem 1rem 2rem;border-radius:999px;cursor:pointer;
+  opacity:0;transition:opacity .8s, box-shadow .4s, background .4s}
+#light.ready{opacity:1}
+#light:hover,#light:focus-visible{background:rgba(143,195,232,.08);box-shadow:0 0 40px rgba(143,195,232,.35);outline:none}
+
+/* ---------- 舷窗外框 ---------- */
+#port{position:fixed;inset:0;pointer-events:none;z-index:2}
+#dial{position:fixed;left:50%;top:50%;width:min(92vmin,880px);height:min(92vmin,880px);transform:translate(-50%,-50%);pointer-events:none;z-index:3;opacity:.55}
+#dial g{transform-origin:500px 500px}
+
+/* ---------- 門口文字 ---------- */
+.door{position:fixed;left:max(16px,6vw);top:max(8vh,48px);z-index:4;pointer-events:none;max-width:32rem}
+.eyebrow{font:500 .7rem/1 var(--f-mono);letter-spacing:.24em;color:var(--dim);text-transform:uppercase}
+.door h1{font-weight:300;font-size:clamp(2rem,6.4vw,4.4rem);letter-spacing:.1em;line-height:1.15;margin:.9rem 0 .6rem}
+.door h1 em{font-family:var(--f-it);font-style:italic;font-weight:500;color:var(--moon);letter-spacing:.02em}
+.door p{margin:0;color:var(--dim);font-size:clamp(.92rem,2.2vw,1.05rem);line-height:1.9}
+
+/* ---------- 儀表板 ---------- */
+.hud{position:fixed;left:0;right:0;bottom:0;z-index:5;display:flex;flex-wrap:wrap;align-items:center;justify-content:space-between;gap:.6rem 1.2rem;
+  padding:14px max(16px,4vw) calc(14px + env(safe-area-inset-bottom,0px));font:400 .7rem/1.4 var(--f-mono);letter-spacing:.14em;color:var(--frost);
+  background:linear-gradient(transparent,rgba(4,6,12,.85) 45%);}
+.hud .grp{display:flex;flex-wrap:wrap;gap:.3rem 1.3rem}
+.hud b{color:var(--ember);font-weight:500}
+.hud button{background:none;border:1px solid rgba(185,195,214,.35);color:var(--ink);font:500 .7rem/1 var(--f-mono);letter-spacing:.3em;
+  padding:.7rem 1rem .7rem 1.3rem;border-radius:4px;cursor:pointer}
+.hud button:hover,.hud button:focus-visible{border-color:var(--ember);color:var(--ember);outline:none}
+
+/* ---------- 房間面板 ---------- */
+#panel{position:fixed;z-index:8;right:0;top:0;bottom:0;width:min(420px,100%);padding:max(10vh,56px) 32px 32px;
+  background:linear-gradient(90deg,rgba(4,6,12,.55),rgba(6,9,18,.96) 30%);border-left:1px solid rgba(185,195,214,.14);
+  transform:translateX(105%);transition:transform .7s cubic-bezier(.2,.7,.1,1)}
+#panel.on{transform:none}
+#panel h2{font-weight:500;font-size:clamp(1.6rem,4vw,2.2rem);letter-spacing:.14em;margin:.8rem 0 .2rem}
+#panel .it{font-family:var(--f-it);font-style:italic;font-size:1.25rem;color:var(--ember);margin-bottom:1.2rem}
+#panel p{color:var(--dim);line-height:1.95;margin:0 0 1.6rem}
+#panel .go{display:inline-block;color:var(--ember);border-bottom:1px solid rgba(143,195,232,.4);text-decoration:none;font:500 .74rem/2 var(--f-mono);letter-spacing:.3em}
+#panel .locked{font:400 .72rem/1.8 var(--f-mono);letter-spacing:.2em;color:var(--dim)}
+#close{position:absolute;top:22px;right:22px;background:none;border:0;color:var(--dim);font:400 1.4rem/1 var(--f-mono);cursor:pointer;padding:8px}
+#close:hover{color:var(--ink)}
+
+/* ---------- 星盤目錄 ---------- */
+#astro{position:fixed;inset:0;z-index:9;display:grid;place-items:center;background:rgba(4,6,12,.72);backdrop-filter:blur(6px);
+  opacity:0;pointer-events:none;transition:opacity .5s}
+#astro.on{opacity:1;pointer-events:auto}
+#astro svg{width:min(88vmin,620px);height:auto;overflow:visible}
+#astro .ring{fill:none;stroke:rgba(185,195,214,.22)}
+#astro .node{cursor:pointer}
+#astro .node text{font:300 15px var(--f-display);fill:var(--ink);letter-spacing:.2em}
+#astro .node .sub{font:400 9px var(--f-mono);fill:var(--dim);letter-spacing:.2em}
+#astro .node circle{fill:var(--void);stroke:var(--frost);stroke-width:1}
+#astro .node.lit circle{stroke:var(--ember);fill:rgba(143,195,232,.12)}
+#astro .node:hover circle{stroke-width:2}
+#astro .hub{font:500 11px var(--f-mono);fill:var(--ember);letter-spacing:.3em}
+
+/* ---------- 流星許願 ---------- */
+#wish{position:fixed;left:50%;top:44%;transform:translate(-50%,-50%) scale(.96);z-index:7;text-align:center;pointer-events:none;
+  opacity:0;transition:opacity .8s, transform .8s;padding:0 16px}
+#wish.on{opacity:1;transform:translate(-50%,-50%) scale(1)}
+#wish .v{font-weight:300;font-size:clamp(1.5rem,5vw,2.6rem);letter-spacing:.24em;line-height:1.5}
+#hint{position:fixed;left:50%;top:60%;transform:translateX(-50%);z-index:4;font:400 .66rem/1 var(--f-mono);letter-spacing:.34em;color:var(--dim);pointer-events:none;transition:opacity .8s}
+
+@media (max-width:640px){
+  .door{top:max(6vh,36px)}
+  .hud{font-size:.62rem}
+  #panel{padding:72px 20px 24px}
+}
+@media (prefers-reduced-motion:reduce){#panel,#astro,#wish,#boot{transition:none}}
+</style>
+</head>
+<body>
+
+<div id="boot">
+  <canvas id="dust" aria-hidden="true"></canvas>
+  <div class="boot-in">
+    <div class="boot-log" id="log" aria-live="polite"></div><br>
+    <button id="light">仰 望</button>
+  </div>
+</div>
+
+<canvas id="sky" aria-label="可以拖曳轉動的南半球星空，亮著的星星是房間入口"></canvas>
+<canvas id="port" aria-hidden="true"></canvas>
+
+<svg id="dial" viewBox="0 0 1000 1000" aria-hidden="true"><g id="ticks"></g></svg>
+
+<section class="door">
+  <div class="eyebrow">仰望星空之人 · <span id="dream">—</span></div>
+  <h1>你好，歡迎來到<br>我的 <em>dream</em></h1>
+  <p>我是知塵 :)<br>拖曳轉動星空。亮著的星，是開著的門。</p>
+</section>
+
+<div id="hint" class="mono">⟲ drag the sky</div>
+
+<div id="wish"><div class="eyebrow">接到一顆流星</div><div class="v" id="wishText"></div></div>
+
+<footer class="hud">
+  <div class="grp">
+    <span>南天</span>
+    <span>你那邊 <b id="clock">—</b></span>
+    <span>月相 <b id="moon">—</b></span>
+    <span>方位 <b id="hdg">000°</b></span>
+  </div>
+  <button id="console" aria-haspopup="dialog">星盤</button>
+</footer>
+
+<aside id="panel" role="dialog" aria-modal="false" aria-labelledby="pTitle">
+  <button id="close" aria-label="關閉">×</button>
+  <div class="eyebrow" id="pEye"></div>
+  <h2 id="pTitle"></h2>
+  <div class="it" id="pIt"></div>
+  <p id="pText"></p>
+  <div id="pAct"></div>
+</aside>
+
+<div id="astro" role="dialog" aria-label="星盤目錄">
+  <svg viewBox="-320 -320 640 640" id="astroSvg"></svg>
+</div>
+
+<script>
+(() => {
+'use strict';
+const reduce = matchMedia('(prefers-reduced-motion: reduce)').matches;
+const $ = id => document.getElementById(id);
+const TAU = Math.PI * 2;
+
+/* ===== 房間（第一批只開兩扇，其餘是「還沒打開的門」） ===== */
+const ROOMS = [
+  {id:'read',  zh:'作品解讀',   en:'readings',        lit:true,  ang:240, rad:40,
+   text:'把看完的作品，拆到角色底層的設定為什麼成立。長文住在這裡，社群只放一顆球當入口。', href:'#'},
+  {id:'dawn',  zh:'日出與足跡', en:'sunrise & footprints', lit:true, ang:320, rad:46,
+   text:'海邊每天早上的光，和沙灘上留下又被抹掉的腳印。第一個房間。', href:'#'},
+  {id:'q',     zh:'問號收藏',   en:'question marks',  lit:false, ang:90,  rad:30,
+   text:'那些還沒有答案、但一直在腦子裡轉的問題。'},
+  {id:'chars', zh:'角色檔案',   en:'archives',        lit:false, ang:150, rad:58,
+   text:'冷門角色最完整的那一份檔案。'},
+  {id:'toys',  zh:'小玩具',     en:'toys',            lit:false, ang:20,  rad:56,
+   text:'點一下就會發生點什麼的東西。'},
+];
+const WISHES = ['朝聞道，夕死可矣','知道一步，邁一步','你看到的星光，是很久以前寄出的信','我們都是星塵做的','仰望星空，也記得看路','今天也問一個新問題'];
+
+/* ===== 時間、月相（觀看者此刻的真實值；用觀看者自己的時區，不洩漏站主在哪） ===== */
+const now = new Date();
+const md = new Intl.DateTimeFormat('en-CA',{month:'2-digit',day:'2-digit'}).format(now).replace('-','.');
+$('dream').textContent = 'dream yr 0001 · ' + md;   // 年份是夢裡的，月日跟現實同一天
+const tick = () => $('clock').textContent = new Intl.DateTimeFormat('zh-TW',{hour:'2-digit',minute:'2-digit',hour12:false}).format(new Date());
+tick(); setInterval(tick, 20000);
+const SYN = 29.530588853;
+const age = (((now - Date.UTC(2000,0,6,18,14)) / 864e5) % SYN + SYN) % SYN;
+const illum = (1 - Math.cos(TAU * age / SYN)) / 2;
+$('moon').textContent = Math.round(illum*100) + '%' + (age < SYN/2 ? ' 漸盈' : ' 漸虧');
+
+/* ===== 開場：塵 ===== */
+const dust = $('dust'), dx = dust.getContext('2d');
+let motes = [], bootOn = true;
+function sizeDust(){
+  const d = Math.min(devicePixelRatio||1,2);
+  dust.width = innerWidth*d; dust.height = innerHeight*d; dx.setTransform(d,0,0,d,0,0);
+  motes = Array.from({length: Math.round(innerWidth*innerHeight/5000)}, () => ({
+    x:Math.random()*innerWidth, y:Math.random()*innerHeight, r:Math.random()*1.2+.2,
+    vx:(Math.random()-.5)*.15, vy:-Math.random()*.25-.05, a:Math.random()*.6+.1}));
+}
+function stepDust(){
+  if (!bootOn) return;
+  dx.clearRect(0,0,innerWidth,innerHeight);
+  for (const m of motes){
+    m.x += m.vx; m.y += m.vy;
+    if (m.y < -4){ m.y = innerHeight+4; m.x = Math.random()*innerWidth; }
+    dx.globalAlpha = m.a; dx.fillStyle = '#d9cfb8';
+    dx.beginPath(); dx.arc(m.x,m.y,m.r,0,TAU); dx.fill();
+  }
+  requestAnimationFrame(stepDust);
+}
+sizeDust(); stepDust();
+const LOG = ['[ 觀星艙 ] 喚醒中','校準南天極 ……… <b>OK</b>','南十字座 ………… <b>4/4</b>','門 …………………… <b>2</b> 開 · <b>3</b> 未開','塵埃落定，可以抬頭了'];
+(async () => {
+  for (const line of LOG){
+    $('log').innerHTML += line + '<br>';
+    await new Promise(r => setTimeout(r, reduce ? 0 : 420));
+  }
+  $('light').classList.add('ready'); $('light').focus({preventScroll:true});
+})();
+let lampT = -1;   // 按下仰望的那一刻：舷窗從中心打開
+$('light').addEventListener('click', () => {
+  lampT = performance.now();
+  $('boot').classList.add('gone');
+  setTimeout(() => { bootOn = false; $('boot').remove(); }, 1300);
+});
+
+/* ===== 星空：以南天極為圓心，拖曳＝轉動 ===== */
+const sky = $('sky'), sx = sky.getContext('2d');
+const port = $('port'), px = port.getContext('2d');
+let W=0, H=0, DPR=1, stars=[], pole={x:0,y:0}, ppd=1;
+let rot = 0, vel = reduce ? 0 : 0.012;   // 角度（度）；沒人碰時慢慢自轉
+// 真實座標：南十字座＋半人馬α、β（指極星）；角度＝赤經×15，半徑＝離南天極幾度
+const NAMED = [
+  {zh:'十字架一', ra:12.519, de:-57.11, m:1.6},{zh:'十字架二', ra:12.443, de:-63.10, m:0.8},
+  {zh:'十字架三', ra:12.795, de:-59.69, m:1.3},{zh:'十字架四', ra:12.252, de:-58.75, m:2.8},
+  {zh:'南門二',   ra:14.660, de:-60.84, m:0.0},{zh:'馬腹一',   ra:14.064, de:-60.37, m:0.6},
+];
+NAMED.forEach(s => { s.ang = s.ra*15; s.rad = 90 + s.de; });
+const CROSS = [[0,1],[2,3]];
+function layout(){
+  DPR = Math.min(devicePixelRatio||1, 2); W = innerWidth; H = innerHeight;
+  for (const c of [sky, port]){ c.width = W*DPR; c.height = H*DPR; }
+  sx.setTransform(DPR,0,0,DPR,0,0); px.setTransform(DPR,0,0,DPR,0,0);
+  pole = {x: W*.5, y: H*.5 + Math.min(W,H)*.06};
+  ppd = Math.min(W,H) / 120;                       // 每度幾像素：舷窗裡看得到離極 ~60°
+  const n = Math.round(W*H/1100);
+  stars = Array.from({length:n}, () => ({
+    ang: Math.random()*360, rad: Math.sqrt(Math.random())*110,
+    r: Math.random()**3*1.6+.25, t: Math.random()*TAU, s:.6+Math.random()*1.8, warm: Math.random()<.1}));
+  drawPort(); buildDial();
+}
+const toXY = (ang, rad) => {           // 南半球面向南：赤經往左增加
+  const a = (ang + rot) * Math.PI/180;
+  return {x: pole.x - Math.sin(a)*rad*ppd, y: pole.y - Math.cos(a)*rad*ppd};
+};
+
+/* 舷窗：邊緣暗掉＋一圈細框 */
+function drawPort(){
+  px.clearRect(0,0,W,H);
+  const R = Math.min(W,H)*.46, cx = W/2, cy = H/2;
+  const g = px.createRadialGradient(cx,cy,R*.78,cx,cy,Math.hypot(W,H)*.6);
+  g.addColorStop(0,'rgba(4,6,12,0)'); g.addColorStop(.18,'rgba(4,6,12,.55)'); g.addColorStop(.4,'rgba(4,6,12,.92)');
+  px.fillStyle = g; px.fillRect(0,0,W,H);
+}
+function buildDial(){
+  let s = '';
+  for (let i=0;i<360;i+=2){
+    const big = i%30===0, len = big?16:(i%10===0?9:4), a = i*Math.PI/180;
+    const r1 = 486, r2 = r1-len;
+    s += `<line x1="${500+Math.sin(a)*r1}" y1="${500-Math.cos(a)*r1}" x2="${500+Math.sin(a)*r2}" y2="${500-Math.cos(a)*r2}" stroke="${big?'#8fc3e8':'#b9c3d6'}" stroke-width="${big?1.4:.8}" opacity="${big?.9:.5}"/>`;
+    if (big) s += `<text x="${500+Math.sin(a)*448}" y="${500-Math.cos(a)*448+4}" fill="#8a92a6" font-family="DM Mono,monospace" font-size="11" text-anchor="middle">${String(i).padStart(3,'0')}</text>`;
+  }
+  s += '<circle cx="500" cy="500" r="490" fill="none" stroke="#b9c3d6" stroke-opacity=".25"/>';
+  $('ticks').innerHTML = s;
+}
+
+/* 拖曳：繞南天極轉 */
+let dragging=false, lastA=0, moved=0, hinted=true;
+const angAt = (x,y) => Math.atan2(x-pole.x, -(y-pole.y)) * 180/Math.PI;
+sky.addEventListener('pointerdown', e => {
+  dragging = true; moved = 0; lastA = angAt(e.clientX,e.clientY); vel = 0;
+  sky.setPointerCapture(e.pointerId); sky.classList.add('drag');
+});
+sky.addEventListener('pointermove', e => {
+  if (dragging){
+    const a = angAt(e.clientX,e.clientY); let d = a - lastA;
+    if (d > 180) d -= 360; if (d < -180) d += 360;
+    rot -= d; vel = -d; lastA = a; moved += Math.abs(d);
+    if (hinted && moved > 8){ hinted = false; $('hint').style.opacity = 0; }
+  } else {
+    sky.style.cursor = hit(e.clientX,e.clientY) ? 'pointer' : '';
+  }
+});
+const endDrag = e => {
+  if (!dragging) return; dragging = false; sky.classList.remove('drag');
+  if (moved < 2) click(e.clientX, e.clientY);
+  if (reduce) vel = 0;
+};
+sky.addEventListener('pointerup', endDrag);
+sky.addEventListener('pointercancel', () => { dragging = false; sky.classList.remove('drag'); });
+
+/* 點擊：門 or 流星 */
+function hit(x,y){
+  for (const m of meteors){ if (Math.hypot(m.x-x, m.y-y) < 40) return {meteor:m}; }
+  for (const r of ROOMS){ const p = toXY(r.ang, r.rad); if (Math.hypot(p.x-x,p.y-y) < 26) return {room:r}; }
+  return null;
+}
+function click(x,y){
+  const h = hit(x,y); if (!h) return;
+  if (h.room) openRoom(h.room);
+  else catchWish(h.meteor);
+}
+function openRoom(r){
+  $('pEye').textContent = r.lit ? 'door · open' : 'door · not yet open';
+  $('pTitle').textContent = r.zh;
+  $('pIt').textContent = r.en;
+  $('pText').textContent = r.text;
+  $('pAct').innerHTML = r.lit ? `<a class="go" href="${r.href}">推門進去 →</a>` : '<div class="locked">門在，還沒打開。</div>';
+  $('panel').classList.add('on'); $('astro').classList.remove('on');
+  focusRoom = r;
+}
+$('close').addEventListener('click', () => { $('panel').classList.remove('on'); focusRoom = null; });
+
+/* 流星：偶爾劃過，點到就是一張籤 */
+const meteors = [];
+let wishTimer = 0;
+function spawnMeteor(){
+  const a = Math.PI*(.62+Math.random()*.16), sp = 5+Math.random()*4;
+  meteors.push({x:W*(.3+Math.random()*.7), y:-20+Math.random()*H*.3, vx:Math.cos(a)*sp, vy:Math.sin(a)*sp, life:0, max:90+Math.random()*50, len:110+Math.random()*90});
+}
+function catchWish(m){
+  m.life = m.max;
+  $('wishText').textContent = WISHES[Math.floor(Math.random()*WISHES.length)];
+  $('wish').classList.add('on'); clearTimeout(wishTimer);
+  wishTimer = setTimeout(() => $('wish').classList.remove('on'), 4200);
+}
+
+/* 星盤目錄 */
+function buildAstro(){
+  let s = '<circle class="ring" r="250"/><circle class="ring" r="160" stroke-dasharray="2 6"/><circle class="ring" r="70"/>';
+  s += '<text class="hub" text-anchor="middle" y="4">知塵 · 夢境</text>';
+  ROOMS.forEach((r,i) => {
+    const a = i/ROOMS.length*TAU - Math.PI/2, R = r.lit ? 160 : 250;
+    const x = Math.cos(a)*R, y = Math.sin(a)*R;
+    s += `<g class="node${r.lit?' lit':''}" data-i="${i}" tabindex="0" role="button" aria-label="${r.zh}">
+      <circle cx="${x}" cy="${y}" r="9"/>
+      <text x="${x}" y="${y+32}" text-anchor="middle">${r.zh}</text>
+      <text class="sub" x="${x}" y="${y+48}" text-anchor="middle">${r.lit?'OPEN':'SOON'}</text></g>`;
+  });
+  $('astroSvg').innerHTML = s;
+  $('astroSvg').querySelectorAll('.node').forEach(n => {
+    const go = () => openRoom(ROOMS[+n.dataset.i]);
+    n.addEventListener('click', go);
+    n.addEventListener('keydown', e => { if (e.key==='Enter'||e.key===' '){ e.preventDefault(); go(); } });
+  });
+}
+buildAstro();
+$('console').addEventListener('click', () => $('astro').classList.toggle('on'));
+$('astro').addEventListener('click', e => { if (e.target === $('astro')) $('astro').classList.remove('on'); });
+addEventListener('keydown', e => { if (e.key==='Escape'){ $('astro').classList.remove('on'); $('panel').classList.remove('on'); focusRoom = null; } });
+
+/* ===== 每一幀 ===== */
+let focusRoom = null, t0 = performance.now();
+function frame(t){
+  const dt = Math.min(50, t-t0); t0 = t;
+  if (!dragging){ rot += vel*dt/16.7; vel += ((reduce?0:.012) - vel)*.02; }
+  const hdg = ((Math.round(-rot) % 360) + 360) % 360;
+  $('hdg').textContent = String(hdg).padStart(3,'0') + '°';
+  $('ticks').style.transform = `rotate(${rot}deg)`;
+
+  sx.fillStyle = '#04060c'; sx.fillRect(0,0,W,H);
+  // 銀河：一條斜過南十字的淡帶
+  sx.save(); sx.translate(pole.x,pole.y); sx.rotate((rot+195)*Math.PI/180 + Math.PI/2); sx.translate(-pole.x,-pole.y);
+  const bg = sx.createLinearGradient(pole.x, pole.y-260*ppd/4, pole.x, pole.y+260*ppd/4);
+  bg.addColorStop(.3,'rgba(150,160,190,0)'); bg.addColorStop(.5,'rgba(150,160,190,.09)'); bg.addColorStop(.7,'rgba(150,160,190,0)');
+  sx.fillStyle = bg; sx.fillRect(pole.x-Math.hypot(W,H), pole.y-Math.hypot(W,H), Math.hypot(W,H)*2, Math.hypot(W,H)*2);
+  sx.restore();
+
+  for (const s of stars){
+    const p = toXY(s.ang, s.rad);
+    if (p.x<-4||p.x>W+4||p.y<-4||p.y>H+4) continue;
+    sx.globalAlpha = reduce ? .8 : .5 + .5*Math.sin(s.t + t*.0012*s.s);
+    sx.fillStyle = s.warm ? '#f3d9a8' : '#dfe6f3';
+    sx.beginPath(); sx.arc(p.x,p.y,s.r,0,TAU); sx.fill();
+  }
+  sx.globalAlpha = 1;
+
+  // 南十字：真實位置，十字線＋長軸延伸到南天極
+  sx.strokeStyle = 'rgba(185,195,214,.5)'; sx.lineWidth = 1;
+  CROSS.forEach(([i,j]) => { const A = toXY(NAMED[i].ang,NAMED[i].rad), B = toXY(NAMED[j].ang,NAMED[j].rad); sx.beginPath(); sx.moveTo(A.x,A.y); sx.lineTo(B.x,B.y); sx.stroke(); });
+  const Ac = toXY(NAMED[1].ang,NAMED[1].rad);
+  sx.setLineDash([2,7]); sx.strokeStyle = 'rgba(143,195,232,.28)';
+  sx.beginPath(); sx.moveTo(Ac.x,Ac.y); sx.lineTo(pole.x,pole.y); sx.stroke(); sx.setLineDash([]);
+  NAMED.forEach(s => {
+    const p = toXY(s.ang,s.rad), r = 2.6 - s.m*.4;
+    const g = sx.createRadialGradient(p.x,p.y,0,p.x,p.y,r*3.2);
+    g.addColorStop(0,'rgba(255,246,228,.95)'); g.addColorStop(.35,'rgba(255,246,228,.35)'); g.addColorStop(1,'rgba(255,246,228,0)');
+    sx.fillStyle = g; sx.beginPath(); sx.arc(p.x,p.y,r*3.2,0,TAU); sx.fill();
+  });
+  // 南天極：一個小十字準星
+  sx.strokeStyle = 'rgba(143,195,232,.5)';
+  sx.beginPath(); sx.moveTo(pole.x-6,pole.y); sx.lineTo(pole.x+6,pole.y); sx.moveTo(pole.x,pole.y-6); sx.lineTo(pole.x,pole.y+6); sx.stroke();
+
+  // 門：亮的會呼吸，沒亮的是一圈虛線
+  for (const r of ROOMS){
+    const p = toXY(r.ang, r.rad);
+    const breathe = reduce ? 1 : .75 + .25*Math.sin(t*.0022 + r.ang);
+    const hot = focusRoom === r;
+    if (r.lit){
+      const g = sx.createRadialGradient(p.x,p.y,0,p.x,p.y,26);
+      g.addColorStop(0,`rgba(143,195,232,${.9*breathe})`); g.addColorStop(.25,`rgba(143,195,232,${.35*breathe})`); g.addColorStop(1,'rgba(143,195,232,0)');
+      sx.fillStyle = g; sx.beginPath(); sx.arc(p.x,p.y,26,0,TAU); sx.fill();
+      sx.fillStyle = '#fff4dc'; sx.beginPath(); sx.arc(p.x,p.y,2.6,0,TAU); sx.fill();
+    } else {
+      sx.setLineDash([2,4]); sx.strokeStyle = 'rgba(185,195,214,.45)';
+      sx.beginPath(); sx.arc(p.x,p.y,7,0,TAU); sx.stroke(); sx.setLineDash([]);
+    }
+    if (hot){ sx.strokeStyle = 'rgba(143,195,232,.8)'; sx.beginPath(); sx.arc(p.x,p.y,16,0,TAU); sx.stroke(); }
+    sx.font = '300 13px "Noto Serif TC", serif'; sx.fillStyle = r.lit ? '#ece6d8' : 'rgba(138,146,166,.8)';
+    sx.fillText(r.zh, p.x+14, p.y-6);
+    sx.font = '400 9px "DM Mono", monospace'; sx.fillStyle = r.lit ? 'rgba(143,195,232,.85)' : 'rgba(138,146,166,.6)';
+    sx.fillText(r.lit ? 'OPEN' : 'SOON', p.x+14, p.y+8);
+  }
+
+  // 流星
+  if (!reduce && !bootOn && Math.random() < .0035) spawnMeteor();
+  for (let i=meteors.length-1;i>=0;i--){
+    const m = meteors[i]; m.life++; m.x += m.vx; m.y += m.vy;
+    const a = Math.sin(Math.PI*Math.min(1,m.life/m.max)), sp = Math.hypot(m.vx,m.vy);
+    const tx = m.x - m.vx/sp*m.len, ty = m.y - m.vy/sp*m.len;
+    const g = sx.createLinearGradient(m.x,m.y,tx,ty);
+    g.addColorStop(0,`rgba(255,248,232,${.95*a})`); g.addColorStop(1,'rgba(255,248,232,0)');
+    sx.strokeStyle = g; sx.lineWidth = 1.6; sx.beginPath(); sx.moveTo(m.x,m.y); sx.lineTo(tx,ty); sx.stroke();
+    if (m.life >= m.max) meteors.splice(i,1);
+  }
+
+  // 仰望：從畫面中心擴散的天青光圈
+  if (lampT > 0){
+    const k = (t - lampT)/1600;
+    if (k < 1){
+      const R = Math.hypot(W,H)*k;
+      const g = sx.createRadialGradient(W/2,H/2,R*.6,W/2,H/2,R);
+      g.addColorStop(0,'rgba(143,195,232,0)'); g.addColorStop(.9,`rgba(143,195,232,${.25*(1-k)})`); g.addColorStop(1,'rgba(143,195,232,0)');
+      sx.fillStyle = g; sx.fillRect(0,0,W,H);
+    } else lampT = -1;
+  }
+  requestAnimationFrame(frame);
+}
+addEventListener('resize', layout);
+layout(); requestAnimationFrame(frame);
+})();
+</script>
+</body>
+</html>

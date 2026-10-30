@@ -97,8 +97,19 @@ canvas{position:fixed;inset:0;width:100%;height:100%;display:block}
 #wish .v{font-weight:300;font-size:clamp(1.5rem,5vw,2.6rem);letter-spacing:.24em;line-height:1.5}
 #hint{position:fixed;left:50%;top:60%;transform:translateX(-50%);z-index:4;font:400 .66rem/1 var(--f-mono);letter-spacing:.34em;color:var(--dim);pointer-events:none;transition:opacity .8s}
 
+/* ---------- 特效強度：一個 data-fx 屬性控全站（借自花俏博客的做法） ---------- */
+.hud .right{display:flex;align-items:center;gap:.8rem}
+.fx{display:flex;align-items:center;gap:2px;border:1px solid rgba(185,195,214,.25);border-radius:4px;padding:2px}
+.fx span{padding:0 .5rem 0 .3rem;color:var(--dim)}
+.hud .fx button{border:0;border-radius:3px;padding:.5rem .55rem .5rem .7rem;letter-spacing:.2em;color:var(--dim)}
+.hud .fx button[aria-pressed="true"]{background:rgba(143,195,232,.14);color:var(--ember)}
+html[data-fx="off"] #dial{opacity:.22}
+html[data-fx="low"] #dial{opacity:.4}
+html[data-fx="high"] #dial{opacity:.75}
+
 @media (max-width:640px){
   .door{top:max(6vh,36px)}
+  .fx span{display:none}
   .hud{font-size:.62rem}
   #panel{padding:72px 20px 24px}
 }
@@ -137,7 +148,16 @@ canvas{position:fixed;inset:0;width:100%;height:100%;display:block}
     <span>月相 <b id="moon">—</b></span>
     <span>方位 <b id="hdg">000°</b></span>
   </div>
-  <button id="console" aria-haspopup="dialog">星盤</button>
+  <div class="right">
+    <div class="fx" role="group" aria-label="特效強度">
+      <span>特效</span>
+      <button data-fx="off" aria-pressed="false">關</button>
+      <button data-fx="low" aria-pressed="false">低</button>
+      <button data-fx="med" aria-pressed="false">中</button>
+      <button data-fx="high" aria-pressed="false">高</button>
+    </div>
+    <button id="console" aria-haspopup="dialog">星盤</button>
+  </div>
 </footer>
 
 <aside id="panel" role="dialog" aria-modal="false" aria-labelledby="pTitle">
@@ -173,7 +193,33 @@ const ROOMS = [
   {id:'toys',  zh:'小玩具',     en:'toys',            lit:false, ang:20,  rad:56,
    text:'點一下就會發生點什麼的東西。'},
 ];
-const WISHES = ['朝聞道，夕死可矣','知道一步，邁一步','你看到的星光，是很久以前寄出的信','我們都是星塵做的','仰望星空，也記得看路','今天也問一個新問題'];
+/* 流星籤是「編劇」不是純隨機（借自桃之夭夭的拉霸）：前兩次照劇本給，之後才隨機、且不連續重複 */
+const SCRIPT = ['朝聞道，夕死可矣','你看到的星光，是很久以前寄出的信'];
+const WISHES = ['知道一步，邁一步','我們都是星塵做的','仰望星空，也記得看路','今天也問一個新問題'];
+
+/* ===== 特效強度：關／低／中／高。存在訪客自己的瀏覽器；手機預設低、偏好減少動態的人預設關 ===== */
+const FX_LEVELS = {
+  off:  {stars:.45, twinkle:0,  meteor:0,     spin:0},
+  low:  {stars:.7,  twinkle:.5, meteor:.0012, spin:.006},
+  med:  {stars:1,   twinkle:1,  meteor:.0035, spin:.012},
+  high: {stars:1.5, twinkle:1,  meteor:.009,  spin:.016},
+};
+const store = {
+  get(k){ try { return localStorage.getItem(k); } catch(e){ return null; } },
+  set(k,v){ try { localStorage.setItem(k,v); } catch(e){} },
+};
+const phone = matchMedia('(pointer: coarse)').matches && innerWidth < 760;
+let fxName = store.get('stargazer-fx');
+if (!FX_LEVELS[fxName]) fxName = reduce ? 'off' : phone ? 'low' : 'med';   // 自動判斷的不寫回存檔
+let FX = FX_LEVELS[fxName];
+function setFx(name, save){
+  fxName = name; FX = FX_LEVELS[name];
+  document.documentElement.dataset.fx = name;
+  document.querySelectorAll('.fx button').forEach(b => b.setAttribute('aria-pressed', String(b.dataset.fx === name)));
+  if (save) store.set('stargazer-fx', name);
+  if (W) layout();
+}
+document.querySelectorAll('.fx button').forEach(b => b.addEventListener('click', () => setFx(b.dataset.fx, true)));
 
 /* ===== 時間、月相（觀看者此刻的真實值；用觀看者自己的時區，不洩漏站主在哪） ===== */
 const now = new Date();
@@ -221,13 +267,18 @@ $('light').addEventListener('click', () => {
   lampT = performance.now();
   $('boot').classList.add('gone');
   setTimeout(() => { bootOn = false; $('boot').remove(); }, 1300);
+  // 第一顆流星一定會來，而且飛得慢、好點；還沒接過籤的人再補一顆
+  if (FX.meteor > 0){
+    setTimeout(() => cueMeteor(), 5500);
+    setTimeout(() => { if (caught() === 0) cueMeteor(); }, 16000);
+  }
 });
 
 /* ===== 星空：以南天極為圓心，拖曳＝轉動 ===== */
 const sky = $('sky'), sx = sky.getContext('2d');
 const port = $('port'), px = port.getContext('2d');
 let W=0, H=0, DPR=1, stars=[], pole={x:0,y:0}, ppd=1;
-let rot = 0, vel = reduce ? 0 : 0.012;   // 角度（度）；沒人碰時慢慢自轉
+let rot = 0, vel = FX.spin;   // 角度（度）；沒人碰時慢慢自轉，速度看特效強度
 // 真實座標：南十字座＋半人馬α、β（指極星）；角度＝赤經×15，半徑＝離南天極幾度
 const NAMED = [
   {zh:'十字架一', ra:12.519, de:-57.11, m:1.6},{zh:'十字架二', ra:12.443, de:-63.10, m:0.8},
@@ -242,7 +293,7 @@ function layout(){
   sx.setTransform(DPR,0,0,DPR,0,0); px.setTransform(DPR,0,0,DPR,0,0);
   pole = {x: W*.5, y: H*.5 + Math.min(W,H)*.06};
   ppd = Math.min(W,H) / 120;                       // 每度幾像素：舷窗裡看得到離極 ~60°
-  const n = Math.round(W*H/1100);
+  const n = Math.round(W*H/1100 * FX.stars);
   stars = Array.from({length:n}, () => ({
     ang: Math.random()*360, rad: Math.sqrt(Math.random())*110,
     r: Math.random()**3*1.6+.25, t: Math.random()*TAU, s:.6+Math.random()*1.8, warm: Math.random()<.1}));
@@ -293,7 +344,7 @@ sky.addEventListener('pointermove', e => {
 const endDrag = e => {
   if (!dragging) return; dragging = false; sky.classList.remove('drag');
   if (moved < 2) click(e.clientX, e.clientY);
-  if (reduce) vel = 0;
+  if (FX.spin === 0) vel = 0;
 };
 sky.addEventListener('pointerup', endDrag);
 sky.addEventListener('pointercancel', () => { dragging = false; sky.classList.remove('drag'); });
@@ -323,13 +374,32 @@ $('close').addEventListener('click', () => { $('panel').classList.remove('on'); 
 /* 流星：偶爾劃過，點到就是一張籤 */
 const meteors = [];
 let wishTimer = 0;
-function spawnMeteor(){
-  const a = Math.PI*(.62+Math.random()*.16), sp = 5+Math.random()*4;
-  meteors.push({x:W*(.3+Math.random()*.7), y:-20+Math.random()*H*.3, vx:Math.cos(a)*sp, vy:Math.sin(a)*sp, life:0, max:90+Math.random()*50, len:110+Math.random()*90});
+function spawnMeteor(slow){
+  const a = Math.PI*(.62+Math.random()*.16), sp = slow ? 2.6 : 5+Math.random()*4;
+  meteors.push({x:W*(.45+Math.random()*.45), y:-20+Math.random()*H*.2, vx:Math.cos(a)*sp, vy:Math.sin(a)*sp,
+    life:0, max: slow ? 260 : 90+Math.random()*50, len: slow ? 150 : 110+Math.random()*90});
+}
+const caught = () => +(store.get('stargazer-wishes') || 0);
+let lastWish = '', cueTimer = 0;
+function cueMeteor(){            // 劇本流星：慢、好點，順便提示一下
+  if (FX.meteor === 0) return;
+  spawnMeteor(true);
+  if (caught() === 0){
+    $('hint').textContent = '✦ 點那顆流星';
+    $('hint').style.opacity = 1; hinted = false;
+    clearTimeout(cueTimer);
+    cueTimer = setTimeout(() => { $('hint').style.opacity = 0; }, 4500);
+  }
 }
 function catchWish(m){
   m.life = m.max;
-  $('wishText').textContent = WISHES[Math.floor(Math.random()*WISHES.length)];
+  const n = caught();
+  let w;
+  if (n < SCRIPT.length) w = SCRIPT[n];
+  else { do { w = WISHES[Math.floor(Math.random()*WISHES.length)]; } while (w === lastWish && WISHES.length > 1); }
+  lastWish = w; store.set('stargazer-wishes', String(n + 1));
+  $('hint').style.opacity = 0;
+  $('wishText').textContent = w;
   $('wish').classList.add('on'); clearTimeout(wishTimer);
   wishTimer = setTimeout(() => $('wish').classList.remove('on'), 4200);
 }
@@ -362,7 +432,7 @@ addEventListener('keydown', e => { if (e.key==='Escape'){ $('astro').classList.r
 let focusRoom = null, t0 = performance.now();
 function frame(t){
   const dt = Math.min(50, t-t0); t0 = t;
-  if (!dragging){ rot += vel*dt/16.7; vel += ((reduce?0:.012) - vel)*.02; }
+  if (!dragging){ rot += vel*dt/16.7; vel += (FX.spin - vel)*.02; }
   const hdg = ((Math.round(-rot) % 360) + 360) % 360;
   $('hdg').textContent = String(hdg).padStart(3,'0') + '°';
   $('ticks').style.transform = `rotate(${rot}deg)`;
@@ -378,7 +448,7 @@ function frame(t){
   for (const s of stars){
     const p = toXY(s.ang, s.rad);
     if (p.x<-4||p.x>W+4||p.y<-4||p.y>H+4) continue;
-    sx.globalAlpha = reduce ? .8 : .5 + .5*Math.sin(s.t + t*.0012*s.s);
+    sx.globalAlpha = (1 - FX.twinkle)*.8 + FX.twinkle*(.5 + .5*Math.sin(s.t + t*.0012*s.s));
     sx.fillStyle = s.warm ? '#f3d9a8' : '#dfe6f3';
     sx.beginPath(); sx.arc(p.x,p.y,s.r,0,TAU); sx.fill();
   }
@@ -422,7 +492,7 @@ function frame(t){
   }
 
   // 流星
-  if (!reduce && !bootOn && Math.random() < .0035) spawnMeteor();
+  if (!bootOn && Math.random() < FX.meteor) spawnMeteor();
   for (let i=meteors.length-1;i>=0;i--){
     const m = meteors[i]; m.life++; m.x += m.vx; m.y += m.vy;
     const a = Math.sin(Math.PI*Math.min(1,m.life/m.max)), sp = Math.hypot(m.vx,m.vy);
@@ -446,6 +516,7 @@ function frame(t){
   requestAnimationFrame(frame);
 }
 addEventListener('resize', layout);
+setFx(fxName, false);
 layout(); requestAnimationFrame(frame);
 })();
 </script>
